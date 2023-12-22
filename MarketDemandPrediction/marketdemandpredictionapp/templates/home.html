@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block content %}
+    <div class="home-div-container" style="display : inline-flex">
+        <label class="label-deco" for="cropDropdown" style="margin-left: 20px; font-size: 15px;">Crop</label>
+        <select id="cropDropdown" class="predictInput" style="width: min-content; margin-left: 10px; height: 30px; font-size: 15px;" title="Crops are cultivated plants grown for food, fiber, or other valuable products, Please choose a crop for which you would like to predict the quantity to be produced.">
+            <option value="" disabled selected>Select a crop</option>
+            {% for crop in crop_names %}
+                <option value="{{ crop }}">{{ crop }}</option>
+            {% endfor %}
+        </select>
+        <input class="label-deco predictInput" type="radio" name="yearSelection" id="singleYear" value="single" checked style="margin-left: 50px">
+        <label class="label-deco" for="singleYear" style="font-size: 15px;" >Single Year</label>
+        <input class="label-deco predictInput" type="radio" name="yearSelection" id="yearRange" value="range" style="margin-left: 20px">
+        <label class="label-deco" for="yearRange" style="font-size: 15px;">Year Range</label>
+        <div id="singleYearPicker">
+            <label class="label-deco predictInput" for="yearpickerSingle"></label>
+            <input type="number" id="yearpickerSingle" class="predictInput" name="yearpickerSingle" title="Select a year or a range to predict the production." >
+        </div>
+        <div id="yearRangePicker" style="display: none;">
+            <label class="label-deco predictInput" for="startYear"></label>
+            <input type="number" id="startYear" name="startYear">
+            <label class="label-deco predictInput" for="endYear" style="font-size: 15px;">To</label>
+            <input type="number" id="endYear" name="endYear">
+        </div>
+        <button id="generate" class="btn rounded-pill px-5 py-2 btn-color mt-2 fs-5 btn-color-primary" style="margin-left:auto; margin-right: 100px; order:9">Predict</button>
+    </div>
+    <br><br>
+
+    <div id="cropDescriptionBox" style="margin-top: 20px;">
+        <p id="cropDescriptionParagraph"></p>
+    </div>
+    <br>
+
+     <div id="accuracyContainer" style="display: none; margin-top: 20px;">
+    <div id="accuracy">
+        <p id="accuracyText">{{ crop }}</p>
+    </div>
+    </div>
+    <br>
+
+    <div id="resultBox">
+         <div id="result"></div><br>
+         <button id="viewChartButton" class="btn rounded-pill px-5 py-2 btn-color mt-2 fs-5 btn-color-primary" style="display:none">View Chart</button>
+    </div>
+    <br><br>
+
+     <div id="chartBox" style="display:none">
+        <div id="chartJSCanvasContainer">
+            <canvas id="chartJSContainer" ></canvas>
+        </div>
+         <br>
+         <div style="display: flex; justify-content: center; align-items: center;">
+            <button id="viewResultButton" class="btn rounded-pill px-5 py-2 btn-color mt-2 fs-5 btn-color-primary" >Hide Chart</button>
+         </div>
+     </div>
+    <script>
+$(document).ready(function() {
+
+    $('#cropDropdown').change(function() {
+        var selectedCrop = $(this).val();
+        var cropDescriptionBox = $('#cropDescriptionBox');
+        var cropDescriptionParagraph = $('#cropDescriptionParagraph');
+
+        if (selectedCrop) {
+            $.ajax({
+                url: '/get_crop_description/',
+                type: 'GET',
+                data: {
+                    selected_crop: selectedCrop,
+                },
+                dataType: 'json',
+                success: function(response) {
+                    cropDescriptionParagraph.text(response.crop_description);
+
+                    cropDescriptionBox.css({
+                        'border': '2px solid #000',
+                        'background-color': 'white',
+                        'margin-right': '50px',
+                        'margin-left': '50px',
+                        'padding': '10px'
+
+                    });
+                },
+                error: function() {
+                    alert('An error occurred while fetching the crop description.');
+                }
+            });
+        } else {
+            cropDescriptionParagraph.text('');
+            cropDescriptionBox.css({
+                'border': 'none',
+                'background-color': 'transparent',
+                'margin-right': '0',
+                'margin-left': '0',
+                'padding': '0'
+            });
+        }
+    });
+
+
+    $('#viewResultButton').click(function(){
+       $('#resultBox').show();
+       $('#chartBox').hide();
+       $('#viewChartButton').show();
+    });
+
+     $('#viewChartButton').click(function(){
+       $('#chartBox').show();
+       /*$('#resultBox').hide();*/
+        $(this).hide();
+    });
+
+    $("input[name='yearSelection']").change(function() {
+        var selectedValue = $("input[name='yearSelection']:checked").val();
+        if (selectedValue === "single") {
+            $("#singleYearPicker").show();
+            $("#yearRangePicker").hide();
+        } else if (selectedValue === "range") {
+            $("#singleYearPicker").hide();
+            $("#yearRangePicker").show();
+        }
+    });
+
+    $("#yearpickerSingle, #startYear, #endYear").yearpicker({
+        startYear : 2023
+    });
+
+    var save = true;
+    $('#generate').click(function() {
+        var selectedCrop = $('#cropDropdown').val();
+        var selectedYearStart, selectedYearEnd;
+
+        $('#accuracyContainer').css({
+                'border': '2px solid #000',
+                'background-color': 'white',
+                'margin-right': '60px',
+                'margin-left': '60px',
+                'padding': '10px',
+                'text-align': 'center'
+        }).show();
+
+        if (selectedCrop === 'Cassava') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 24% - The accuracy is comparatively less due to insufficient data</p>');
+        }
+        if (selectedCrop === 'Maize') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 67%</p>');
+        }
+        if (selectedCrop === 'Plantains and others') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 60% </p>');
+        }
+        if (selectedCrop === 'Potatoes') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 85% </p>');
+        }
+        if (selectedCrop === 'Rice, paddy') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 57% </p>');
+        }
+        if (selectedCrop === 'Sorghum') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 85% </p>');
+        }
+        if (selectedCrop === 'Soybeans') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 97% </p>');
+        }
+        if (selectedCrop === 'Sweet potatoes') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 32%. The accuracy is comparatively low due to insufficient data</p>');
+        }
+        if (selectedCrop === 'Wheat') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 14%. The accuracy is comparatively low due to insufficient data</p>');
+        }
+        if (selectedCrop === 'Yams') {
+            $('#accuracyText').html('<p>The predicted production accuracy is 44%. The accuracy is comparatively low due to insufficient data</p>');
+        }
+
+
+        if (! selectedCrop) {
+            alert("Please select a crop.");
+            return;
+        }
+
+        if ($("input[name='yearSelection']:checked").val() === "single") {
+            selectedYearEnd = $('#yearpickerSingle').val();
+
+            if (! selectedYearEnd) {
+                alert("Please select a year.");
+                return;
+            } else if (parseInt(selectedYearEnd) < 2017) {
+                alert("Invalid year.");
+                return;
+            }
+        } else {
+            selectedYearStart = $('#startYear').val();
+            selectedYearEnd = $('#endYear').val();
+
+            if (! selectedYearStart || ! selectedYearEnd) {
+                alert("Please select a year range.");
+                return;
+            } else if (parseInt(selectedYearStart) < 2017 || parseInt(selectedYearStart) > parseInt(selectedYearEnd)) {
+                alert("Invalid year range.");
+                return;
+            }
+        }
+
+        $.ajax({
+            url: '/predict/',
+            type: 'GET',
+            data: {
+                selected_crop: selectedCrop,
+                selected_start_year: selectedYearStart,
+                selected_end_year: selectedYearEnd,
+                save: save
+            },
+            success: function(chartData) {
+                var chartDataJson = JSON.parse(chartData);
+                $('#chartBox').hide();
+                var predictionsData = chartDataJson.predict_values;
+                var tableHTML = '<table style="border-collapse: collapse; width: 10%; border: 2px solid #000; padding: 10%; background-color: white;">';
+                tableHTML += '<thead style="background-color: #f2f2f2;"><tr><th style="border: 1px solid #ddd; padding: 8px;">Year</th><th style="border: 1px solid #ddd; padding: 8px;">Production[Hg/Ha]</th></tr></thead>';
+                tableHTML += '<tbody>';
+                for (var key in predictionsData) {
+                    if (predictionsData.hasOwnProperty(key)) {
+                            tableHTML += '<tr><td style="border: 1px solid #ddd; padding: 8px;">' + key + '</td><td style="border: 1px solid #ddd; padding: 8px;">' + (predictionsData[key] < 0 ? 0 : predictionsData[key]) + '</td></tr>';
+                    }
+                }
+                tableHTML += '</tbody>';
+                tableHTML += '</table>';
+                $('#result').html(tableHTML);
+                $('#viewChartButton').show();
+                //$('#result').text(chartData);
+                var chartDataJson = JSON.parse(chartData);
+                var options = {
+                    type: 'line',
+                    responsive : true,
+                    data: {
+                        labels : chartDataJson.years.split(','),
+                        datasets : [
+                            {
+                                label: 'scattered',
+                                data: chartDataJson.actual_values,
+                                borderColor: 'rgb(41,72,6)',
+                                showLine: false,
+                                pointRadius: 5,
+                                backgroundColor: 'green'
+                            },
+                            {
+                                label: 'predictions',
+                                data: chartDataJson.predict_values,
+                                pointStyle: 'triangle',
+                                pointRadius: 8,
+                                borderColor: 'rgb(6,21,72)',
+                                backgroundColor: 'blue'
+                            },
+                            {
+                                label: 'regression line',
+                                data: chartDataJson.regression_values,
+                                borderColor: 'rgba(255, 0, 0, 1)',
+                                pointRadius: 0
+                            }
+                        ],
+                    },
+                    options: {
+                        tooltips: {
+                            filter: tooltipItem => tooltipItem.datasetIndex == 0
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: 'black',
+                                },
+                            },
+                            y: {
+                                ticks: {
+                                    color: 'black',
+                                },
+                            },
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: 'black',
+                                },
+                            },
+                        },
+                        elements: {
+                            point: {
+                                borderColor: 'rgba(255, 0, 0, 1)',
+                                backgroundColor: 'rgba(255, 0, 0, 1)',
+                            },
+                        },
+                    },
+                };
+                $('#chartJSCanvasContainer').html('<canvas id="chartJSContainer"></canvas>');
+                var ctx = document.getElementById('chartJSContainer').getContext('2d');
+                var chartContainer = document.getElementById('chartJSCanvasContainer');
+                new Chart(ctx, options);
+                chartContainer.style.backgroundColor = 'white';
+                chartContainer.style.marginLeft = "90px";
+                chartContainer.style.marginRight = "90px";
+            },
+            error: function() {
+                alert('An error occurred.');
+            }
+        });
+    });
+
+    {% if selected_crop_name %}
+        var selectedCropName = '{{ selected_crop_name }}';
+        var selectedStartYear = '{{ selected_start_year }}';
+        var selectedEndYear = '{{ selected_end_year }}';
+
+        $('#cropDropdown').val('{{ selected_crop_name }}');
+        if (selectedStartYear === selectedEndYear) {
+            $('#singleYear').prop('checked', true);
+            $('#singleYear').change();
+
+            $('#yearpickerSingle').val(selectedStartYear);
+        } else {
+            $('#yearRange').prop('checked', true);
+            $('#yearRange').change();
+
+            $('#startYear').val(selectedStartYear);
+            $('#endYear').val(selectedEndYear);
+        }
+
+        save = false;
+        $('#generate').click();
+
+        $('#generate').hide();
+
+        $('.predictInput').prop('disabled', true)
+
+
+    {% endif %}
+});
+    </script>
+</div>
+{% endblock %}
+
